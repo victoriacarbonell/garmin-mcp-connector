@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "garmin-mcp-connector"
+version = "0.1.0"
+description = "Personal read-only MCP connector for the Garmin Connect Personal API"
+requires-python = ">=3.12"
+dependencies = [
+    # Official MCP SDK. In 2.x, FastMCP was renamed to MCPServer.
+    "mcp>=2.3,<3",
+    # Official Garmin client for the Personal API.
+    "garmin-connect-personal-api-python>=1.0,<2",
+    "uvicorn>=0.30",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+garmin-mcp = "garmin_mcp.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/garmin_mcp"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

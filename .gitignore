@@ -1,0 +1,25 @@
+# Secrets: never commit
+.env
+.env.*
+!.env.example
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+
+# Personal data downloaded from Garmin (in case of manual testing)
+*.fit
+*.zip
+data/
+
+# Editor
+.vscode/
+.DS_Store
