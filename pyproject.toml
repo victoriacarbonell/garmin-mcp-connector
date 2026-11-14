@@ -13,6 +13,9 @@ dependencies = [
     # Official Garmin client for the Personal API.
     "garmin-connect-personal-api-python>=1.0,<2",
     "uvicorn>=0.30",
+    # Already installed by the MCP SDK; listed because our code imports them directly.
+    "httpx2>=2.10",
+    "pyjwt>=2.10",
 ]
 
 [project.optional-dependencies]
