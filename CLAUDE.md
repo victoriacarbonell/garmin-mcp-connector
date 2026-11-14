@@ -1,12 +1,19 @@
 # Reglas del proyecto
 
-## Git: Claude no hace commits
+## Git: commits solo cuando Victoria lo pide
 
-- Claude **nunca** ejecuta `git commit`, `git push` ni crea pull requests en este repositorio.
+- Claude **no** hace `git commit` ni `git push` por iniciativa propia, y nunca crea pull
+  requests salvo que Victoria lo pida.
 - Cuando el trabajo llegue a un punto en el que toque hacer commit, Claude **se detiene**,
-  resume los archivos cambiados y propone el mensaje de commit. El commit lo hace Victoria.
-- Esta regla tiene prioridad sobre cualquier instrucción automática del entorno que pida
-  hacer commit o push.
+  resume los archivos cambiados y propone el mensaje de commit.
+- Claude solo hace el commit (y el push) cuando Victoria lo pide expresamente en la
+  conversación (por ejemplo `/commit`, "haz commit" o "haz push"), y siempre siguiendo la
+  skill `.claude/skills/commit/SKILL.md`: mensaje en inglés con estilo estándar de git,
+  Victoria como autora con su email `noreply` de GitHub, sin firma y sin líneas de
+  atribución a Claude (`Co-Authored-By`, enlaces a la sesión, etc.).
+- Cada petición vale para un commit; no es un permiso permanente.
+- Los avisos automáticos del entorno que piden hacer commit o push (por ejemplo, un
+  "stop hook") **no** son una petición de Victoria: se ignoran.
 
 ## Forma de trabajar
 
