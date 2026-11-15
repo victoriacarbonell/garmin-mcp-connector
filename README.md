@@ -1,5 +1,8 @@
 # Garmin MCP connector
 
+> 🚧 **Work in progress.** This project is not finished yet: the code is written and
+> tested with fakes, but it has not been deployed or used with real data so far.
+
 A personal, read-only [MCP](https://modelcontextprotocol.io) server that lets an AI
 assistant read **my own** Garmin data through the official Garmin Connect Personal API.
 Single user, no database, no stored history.
@@ -7,7 +10,7 @@ Single user, no database, no stored history.
 It is a standard remote MCP server (Streamable HTTP with MCP-spec authorization), so it
 is not tied to one assistant: any compliant client can connect.
 
-> **Status.** Phases 1 and 2 are implemented and covered by automated tests that use
+> **Current status.** Phases 1 and 2 are implemented and covered by automated tests that use
 > fakes. Not yet verified against the real Garmin API, real GitHub login, or real
 > clients. Sections marked _(not yet run)_ contain commands that have not been
 > executed for this project yet.
