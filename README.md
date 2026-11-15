@@ -237,3 +237,15 @@ The Garmin Connect Personal API is for personal access to your own data, not for
 applications serving other users. Read the terms shown when creating the key before
 using this with any AI assistant; using a connector sends the returned data to that
 assistant's provider.
+
+## License and disclaimer
+
+© Victoria Carbonell Sánchez. All rights reserved.
+
+This repository is public as a sample of my work. It is a personal project that I run
+for myself with my own Garmin key: it is not a product or a service, no hosted instance
+is offered to anyone else, and no permission is granted to use, modify or distribute
+the code.
+
+Not affiliated with, endorsed by or sponsored by Garmin. "Garmin" and "Garmin Connect"
+are trademarks of Garmin Ltd. or its subsidiaries.
