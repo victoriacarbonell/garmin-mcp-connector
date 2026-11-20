@@ -20,8 +20,9 @@ Field names used here come from the official Swagger (v1.0.0).
 from __future__ import annotations
 
 import asyncio
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from .garmin import GarminError, GarminService
 
@@ -188,4 +189,76 @@ async def get_health_range(
     data, warnings = await _sections({
         m: service.call(RANGE_METRICS[m][0], start.isoformat(), end.isoformat()) for m in selected
     })
+    return _envelope(data, warnings)
+
+
+# HTTP statuses that, for the menstrual cycle endpoints, most likely mean that
+# cycle tracking is not set up for the account. Garmin does not document this:
+# it is our reading of 400/403/404. Other errors (401 expired key, 429, 5xx,
+# network) are handled like in every other tool.
+CYCLE_NOT_SET_UP_STATUSES = frozenset({400, 403, 404})
+_CYCLE_NOT_SET_UP_HINT = (
+    "This may mean menstrual cycle tracking is not set up in Garmin Connect for this account."
+)
+
+
+class _CycleNotSetUp:
+    """Marks a section whose request failed in a way that suggests tracking is off."""
+
+    def __init__(self, error: GarminError) -> None:
+        self.error = error
+
+
+async def _cycle_section(call: Any) -> Any:
+    try:
+        return await call
+    except GarminError as exc:
+        if exc.status_code in CYCLE_NOT_SET_UP_STATUSES:
+            return _CycleNotSetUp(exc)
+        raise
+
+
+# The owner lives in Spain. The server runs in UTC on Azure, so "today" is
+# computed in Spanish time; otherwise it would still be yesterday between
+# midnight and 01:00 (02:00 in summer).
+OWNER_TIMEZONE = ZoneInfo("Europe/Madrid")
+
+# Fields of the day log that are deliberately never returned: free-text notes and
+# sexual activity. The owner chose not to send them to any AI assistant.
+CYCLE_PRIVATE_FIELDS = frozenset({"notes", "sexDrive", "sexualActivity"})
+
+
+def _today(now: datetime | None = None) -> date:
+    """Today's date in Spain. `now` (timezone-aware) is only passed by tests."""
+    return (now or datetime.now(timezone.utc)).astimezone(OWNER_TIMEZONE).date()
+
+
+def _drop_private_cycle_fields(value: Any) -> Any:
+    """Remove CYCLE_PRIVATE_FIELDS at any depth, wherever Garmin puts them."""
+    if isinstance(value, dict):
+        return {k: _drop_private_cycle_fields(v) for k, v in value.items() if k not in CYCLE_PRIVATE_FIELDS}
+    if isinstance(value, list):
+        return [_drop_private_cycle_fields(v) for v in value]
+    return value
+
+
+async def get_menstrual_cycle(service: GarminService, day: str) -> dict[str, Any]:
+    d = _parse_date(day, "date").isoformat()
+    data, warnings = await _sections({
+        # Cycle summary for that date: phase, day in cycle, predictions...
+        "summary": _cycle_section(service.call("get_menstrual_cycle_summary", d)),
+        # Details of that date: logged data, the summary for that day and, for
+        # pregnancy tracking, weight goals. `todayDate` anchors the predictions.
+        "day_view": _cycle_section(
+            service.call("get_menstrual_cycle_day_view", d, _today().isoformat())
+        ),
+    })
+    for name in list(data):
+        value = data[name] = _drop_private_cycle_fields(data[name])
+        if isinstance(value, _CycleNotSetUp):
+            del data[name]
+            warnings.append(f"{name}: {value.error} {_CYCLE_NOT_SET_UP_HINT}")
+        elif value is None or value == {} or value == []:
+            del data[name]
+            warnings.append(f"{name}: Garmin returned no data for {d}. {_CYCLE_NOT_SET_UP_HINT}")
     return _envelope(data, warnings)
