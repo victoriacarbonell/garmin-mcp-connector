@@ -23,6 +23,7 @@ is not tied to one assistant: any compliant client can connect.
 | `get_activity` | Details of one activity, optionally its workouts |
 | `get_daily_health` | One day: daily summary, sleep and HRV |
 | `get_health_range` | Daily summaries, sleep and HRV over a date range |
+| `get_menstrual_cycle` | One day: cycle summary (phase, day in cycle, predictions) and day view |
 
 Every response has the same shape:
 

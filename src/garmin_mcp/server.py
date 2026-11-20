@@ -132,4 +132,25 @@ def create_mcp_server(**auth_options: Any) -> MCPServer:
             "get_health_range", lambda: tools.get_health_range(get_service(), start_date, end_date, metrics)
         )
 
+    @mcp.tool(title="Menstrual cycle for one day", annotations=READ_ONLY)
+    async def get_menstrual_cycle(date: str) -> dict[str, Any]:
+        """Menstrual cycle data for one date (YYYY-MM-DD), as recorded and predicted by Garmin.
+
+        Use it to answer questions about a specific date: the cycle phase, the day within
+        the cycle, and Garmin's predictions (cycle length, ovulation date, fertile window,
+        days until the next phase). The date may be in the past or the future.
+
+        It covers ONE date per call. To look at several days, call it once per day.
+
+        Returns two sections: 'summary' (the cycle that contains the date) and 'day_view'
+        (what was logged on that date plus the summary for that day). The phase is given
+        as a numeric id (currentPhase) whose meaning Garmin does not document: do not
+        guess a phase name from the number. If cycle tracking is not set up in Garmin
+        Connect, the sections are missing and 'warnings' explains why.
+
+        Free-text notes and sexual activity fields are removed on purpose and are never
+        returned: their absence does not mean nothing was logged.
+        """
+        return await _run("get_menstrual_cycle", lambda: tools.get_menstrual_cycle(get_service(), date))
+
     return mcp

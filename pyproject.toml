@@ -16,6 +16,10 @@ dependencies = [
     # Already installed by the MCP SDK; listed because our code imports them directly.
     "httpx2>=2.10",
     "pyjwt>=2.10",
+    # Time zone database for zoneinfo ("today" is computed in Spanish time). Python
+    # uses the system copy when there is one; this is the official fallback for
+    # slim container images that may not ship it.
+    "tzdata",
 ]
 
 [project.optional-dependencies]

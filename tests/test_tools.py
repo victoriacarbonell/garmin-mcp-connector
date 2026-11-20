@@ -1,6 +1,7 @@
 """Tests for the tools using a fake service (no network and no key)."""
 
 import asyncio
+import logging
 
 import pytest
 
@@ -9,13 +10,19 @@ from garmin_mcp.garmin import GarminError
 
 
 class FakeService:
-    def __init__(self, responses=None, failing=()):
+    """`failing`: methods that fail with no HTTP status (e.g. network error).
+    `errors`: method -> GarminError to raise, to simulate a specific HTTP status."""
+
+    def __init__(self, responses=None, failing=(), errors=None):
         self.responses = responses or {}
         self.failing = set(failing)
+        self.errors = errors or {}
         self.calls = []
 
     async def call(self, method, *args, **kwargs):
         self.calls.append((method, args, kwargs))
+        if method in self.errors:
+            raise self.errors[method]
         if method in self.failing:
             raise GarminError(f"simulated failure in {method}")
         return self.responses.get(method)
@@ -109,3 +116,142 @@ def test_health_range_enforces_documented_limits():
 def test_health_range_rejects_unknown_metrics():
     with pytest.raises(ValueError, match="Invalid metrics"):
         run(tools.get_health_range(FakeService(), "2026-11-01", "2026-11-07", ["steps"]))
+
+
+# --- get_menstrual_cycle ------------------------------------------------------
+
+CYCLE_SUMMARY = {"dayInCycle": 12, "currentPhase": 2, "predictedCycleLength": 28, "userProfilePk": 99}
+CYCLE_DAY_VIEW = {"dayLog": {"flow": "LIGHT", "userProfilePk": 99}, "daySummary": {"dayInCycle": 12}}
+
+
+def http_error(status, path="/periodichealth-service/menstrualcycle/summary/2026-11-10"):
+    return GarminError(f"Garmin returned HTTP {status} for GET {path}.", status_code=status)
+
+
+@pytest.fixture
+def fixed_today(monkeypatch):
+    monkeypatch.setattr(tools, "_today", lambda: tools.date(2026, 11, 20))
+
+
+def test_menstrual_cycle_normal_case(fixed_today):
+    service = FakeService({
+        "get_menstrual_cycle_summary": CYCLE_SUMMARY,
+        "get_menstrual_cycle_day_view": CYCLE_DAY_VIEW,
+    })
+    result = run(tools.get_menstrual_cycle(service, "2026-11-10"))
+
+    assert result["source"] == tools.SOURCE
+    assert result["own_calculations"] is None
+    assert result["warnings"] == []
+    assert result["garmin_data"] == {
+        "summary": {"dayInCycle": 12, "currentPhase": 2, "predictedCycleLength": 28},  # no account id
+        "day_view": {"dayLog": {"flow": "LIGHT"}, "daySummary": {"dayInCycle": 12}},
+    }
+    # Both official methods, with the requested date and the server's date as todayDate.
+    assert sorted((method, args) for method, args, _ in service.calls) == [
+        ("get_menstrual_cycle_day_view", ("2026-11-10", "2026-11-20")),
+        ("get_menstrual_cycle_summary", ("2026-11-10",)),
+    ]
+
+
+def test_menstrual_cycle_day_without_data_warns_instead_of_failing(fixed_today):
+    service = FakeService({
+        "get_menstrual_cycle_summary": None,  # empty response body
+        "get_menstrual_cycle_day_view": {"userProfilePk": 99},  # nothing left once cleaned
+    })
+    result = run(tools.get_menstrual_cycle(service, "2026-11-10"))
+
+    assert result["garmin_data"] == {}
+    assert len(result["warnings"]) == 2
+    assert all("no data for 2026-11-10" in w and "not set up" in w for w in result["warnings"])
+
+
+@pytest.mark.parametrize("bad_date", ["10/11/2026", "2026-02-30", "", "today"])
+def test_menstrual_cycle_rejects_invalid_dates_before_calling_garmin(bad_date):
+    service = FakeService()
+    with pytest.raises(ValueError, match="YYYY-MM-DD"):
+        run(tools.get_menstrual_cycle(service, bad_date))
+    assert service.calls == []
+
+
+def test_menstrual_cycle_one_section_fails_the_other_is_returned(fixed_today):
+    service = FakeService(
+        {"get_menstrual_cycle_day_view": CYCLE_DAY_VIEW},
+        failing={"get_menstrual_cycle_summary"},
+    )
+    result = run(tools.get_menstrual_cycle(service, "2026-11-10"))
+
+    assert set(result["garmin_data"]) == {"day_view"}
+    assert len(result["warnings"]) == 1 and result["warnings"][0].startswith("summary:")
+
+
+@pytest.mark.parametrize("status", [400, 403, 404])
+def test_menstrual_cycle_tracking_not_set_up_warns_instead_of_failing(status, fixed_today):
+    service = FakeService(errors={
+        "get_menstrual_cycle_summary": http_error(status),
+        "get_menstrual_cycle_day_view": http_error(status),
+    })
+    result = run(tools.get_menstrual_cycle(service, "2026-11-10"))
+
+    assert result["garmin_data"] == {}
+    assert len(result["warnings"]) == 2
+    assert all(f"HTTP {status}" in w and "not set up" in w for w in result["warnings"])
+
+
+def test_menstrual_cycle_other_errors_still_fail(fixed_today):
+    """An expired key (401) must not be disguised as "tracking not set up"."""
+    service = FakeService(errors={
+        "get_menstrual_cycle_summary": http_error(401),
+        "get_menstrual_cycle_day_view": http_error(401),
+    })
+    with pytest.raises(GarminError, match="401"):
+        run(tools.get_menstrual_cycle(service, "2026-11-10"))
+
+
+def test_menstrual_cycle_logs_contain_no_response_content(monkeypatch, caplog, fixed_today):
+    """Through the real MCP tool: the log shows the call, never what Garmin returned."""
+    from garmin_mcp import server
+
+    marker = "SENSITIVE-CYCLE-VALUE"
+    service = FakeService({
+        "get_menstrual_cycle_summary": {"feedbackPhrase": marker},
+        "get_menstrual_cycle_day_view": {"dayLog": {"flow": marker}},
+    })
+    monkeypatch.setattr(server, "get_service", lambda: service)
+    mcp = server.create_mcp_server()
+
+    caplog.set_level(logging.INFO)
+    result = run(mcp.call_tool("get_menstrual_cycle", {"date": "2026-11-10"}))
+
+    assert not result.is_error
+    assert marker in str(result.structured_content)  # the assistant does get the data
+    assert "tool=get_menstrual_cycle outcome=ok" in caplog.text
+    assert marker not in caplog.text
+
+
+def test_menstrual_cycle_never_returns_notes_or_sexual_activity(fixed_today):
+    service = FakeService({
+        "get_menstrual_cycle_summary": CYCLE_SUMMARY,
+        "get_menstrual_cycle_day_view": {
+            "dayLog": {"flow": "LIGHT", "notes": "private text", "sexDrive": "HIGH", "sexualActivity": "YES"},
+            "daySummary": {"dayInCycle": 12},
+        },
+    })
+    result = run(tools.get_menstrual_cycle(service, "2026-11-10"))
+
+    assert result["garmin_data"]["day_view"]["dayLog"] == {"flow": "LIGHT"}
+    for field in ("notes", "sexDrive", "sexualActivity", "private text"):
+        assert field not in str(result)
+
+
+@pytest.mark.parametrize(
+    "utc_now,spanish_date",
+    [
+        (tools.datetime(2026, 11, 19, 23, 30, tzinfo=tools.timezone.utc), "2026-11-20"),  # winter, UTC+1
+        (tools.datetime(2026, 11, 19, 22, 30, tzinfo=tools.timezone.utc), "2026-11-19"),
+        (tools.datetime(2026, 7, 1, 22, 30, tzinfo=tools.timezone.utc), "2026-07-02"),  # summer, UTC+2
+        (tools.datetime(2026, 7, 1, 21, 30, tzinfo=tools.timezone.utc), "2026-07-01"),
+    ],
+)
+def test_today_is_the_date_in_spain(utc_now, spanish_date):
+    assert tools._today(utc_now).isoformat() == spanish_date

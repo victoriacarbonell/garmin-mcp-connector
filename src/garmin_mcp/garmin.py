@@ -44,7 +44,15 @@ _MAX_CACHE_ENTRIES = 64
 
 
 class GarminError(Exception):
-    """Error talking to Garmin, with a safe message (no personal data)."""
+    """Error talking to Garmin, with a safe message (no personal data).
+
+    `status_code` is the HTTP status Garmin answered with, or None when the
+    request never got an HTTP answer (network error, invalid parameters).
+    """
+
+    def __init__(self, message: str, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
 
 
 class GarminService:
@@ -92,7 +100,7 @@ class GarminService:
             try:
                 result = self._request(method, args, kwargs)
             except HttpError as exc:
-                raise GarminError(_safe_http_message(exc)) from None
+                raise GarminError(_safe_http_message(exc), status_code=exc.status_code) from None
             except GarminPersonalApiError:
                 raise GarminError(
                     "The Garmin client rejected the request (invalid parameters or credentials)."
