@@ -77,6 +77,18 @@ def test_get_activity_optionally_includes_workouts():
     assert set(with_workouts["garmin_data"]) == {"activity", "workouts"}
 
 
+def test_get_activity_drops_user_info_from_metadata():
+    service = FakeService({"get_activity": {
+        "activityId": 7,
+        "metadataDTO": {
+            "lapCount": 7,
+            "userInfoDto": {"fullname": "Must not appear", "profileImageUrlSmall": "https://x"},
+        },
+    }})
+    activity = run(tools.get_activity(service, 7))["garmin_data"]["activity"]
+    assert activity["metadataDTO"] == {"lapCount": 7}
+
+
 def test_daily_health_survives_a_failing_section_and_hides_hrv_readings():
     service = FakeService(
         {

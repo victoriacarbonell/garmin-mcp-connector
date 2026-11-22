@@ -45,6 +45,8 @@ _DROP_KEYS = frozenset({
     "userProfilePK", "userProfilePk", "userProfileId", "ownerId", "ownerDisplayName",
     "ownerFullName", "ownerProfileImageUrlSmall", "ownerProfileImageUrlMedium",
     "ownerProfileImageUrlLarge",
+    # Activity details metadata: full name, display name and profile image URLs.
+    "userInfoDto",
 })  # fmt: skip
 
 # Range limits documented in the Swagger (days, both ends included).
