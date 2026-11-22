@@ -1,7 +1,8 @@
 # Garmin MCP connector
 
-> 🚧 **Work in progress.** This project is not finished yet: the code is written and
-> tested with fakes, but it has not been deployed or used with real data so far.
+> 🚧 **Work in progress.** This project is not finished yet: every tool has been run
+> locally against the real Garmin API, but the GitHub login has not been tried and the
+> connector has not been deployed.
 
 A personal, read-only [MCP](https://modelcontextprotocol.io) server that lets an AI
 assistant read **my own** Garmin data through the official Garmin Connect Personal API.
@@ -10,10 +11,16 @@ Single user, no database, no stored history.
 It is a standard remote MCP server (Streamable HTTP with MCP-spec authorization), so it
 is not tied to one assistant: any compliant client can connect.
 
-> **Current status.** Phases 1 and 2 are implemented and covered by automated tests that use
-> fakes. Not yet verified against the real Garmin API, real GitHub login, or real
-> clients. Sections marked _(not yet run)_ contain commands that have not been
-> executed for this project yet.
+> **Current status.** Phases 1 and 2 are implemented and covered by automated tests that
+> use fakes.
+>
+> - **Verified:** all five tools, run locally against the real Garmin Connect Personal
+>   API with authorization disabled (November 2026).
+> - **Not yet verified:** the GitHub login, assistant clients such as Claude, and the
+>   Azure deployment.
+>
+> Sections marked _(not yet run)_ contain commands that have not been executed for this
+> project yet.
 
 ## Tools
 
@@ -38,6 +45,14 @@ Only endpoints documented in the
 [official Swagger](https://developer.garmin.com/gc-developer-program/personal/swagger-docs/)
 are used.
 
+Worth knowing from the real API:
+
+- `get_health_range` returns about 6,000 characters per day with all three metrics, so a
+  31-day range uses a good share of an assistant's context. Ask for fewer metrics or a
+  shorter range when possible.
+- `get_menstrual_cycle` gives the phase as a numeric id (`currentPhase`) whose meaning
+  Garmin does not document.
+
 ## How it is built
 
 ```
@@ -59,6 +74,8 @@ Design rules:
 - **Nothing is stored.** The container scales to zero, so tokens, client registrations
   and login state are signed tokens, not rows in a database.
 - **No health data in logs.** Logs contain tool name, outcome and duration only.
+- **No account identifiers in responses.** Names, profile ids and profile image URLs
+  are removed before data reaches the assistant.
 - **Small cache.** In memory, 5 minutes, at most 64 entries.
 - **The Garmin key is never in the code or the repository.**
 
@@ -93,6 +110,21 @@ pytest
 cp .env.example .env      # then fill it in
 python -m garmin_mcp
 ```
+
+On Windows (PowerShell):
+
+```powershell
+py -3.12 -m venv .venv    # or any installed version from 3.12 up
+.\.venv\Scripts\Activate.ps1
+pip install -e ".[dev]"
+pytest
+Copy-Item .env.example .env
+python -m garmin_mcp
+```
+
+Run `pip install -e ".[dev]"` again whenever `pyproject.toml` changes. On Windows a
+missing dependency shows up as `No time zone found with key Europe/Madrid`: Windows has
+no time zone database, so it comes from the `tzdata` package.
 
 The endpoint is `http://localhost:8000/mcp`. Test it with
 `npx @modelcontextprotocol/inspector` (transport: Streamable HTTP).
