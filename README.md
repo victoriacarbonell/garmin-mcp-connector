@@ -1,8 +1,8 @@
 # Garmin MCP connector
 
-> 🚧 **Work in progress.** This project is not finished yet: every tool has been run
-> locally against the real Garmin API, but the GitHub login has not been tried and the
-> connector has not been deployed.
+> 🚧 **Work in progress.** This project is not finished yet: the tools and the GitHub
+> login have been tested locally with real data and a real GitHub account, but the
+> connector has not been deployed or used from an assistant yet.
 
 A personal, read-only [MCP](https://modelcontextprotocol.io) server that lets an AI
 assistant read **my own** Garmin data through the official Garmin Connect Personal API.
@@ -14,10 +14,16 @@ is not tied to one assistant: any compliant client can connect.
 > **Current status.** Phases 1 and 2 are implemented and covered by automated tests that
 > use fakes.
 >
-> - **Verified:** all five tools, run locally against the real Garmin Connect Personal
->   API with authorization disabled (November 2026).
-> - **Not yet verified:** the GitHub login, assistant clients such as Claude, and the
->   Azure deployment.
+> - **Verified locally (November 2026):**
+>   - All five tools against the real Garmin Connect Personal API.
+>   - The full authorization flow with a real GitHub OAuth App: client registration,
+>     GitHub login, consent screen, token exchange and MCP calls with the token. Another
+>     GitHub account is refused before the consent screen, and an invalid token gets
+>     `401`.
+> - **Not yet verified:** assistant clients such as Claude, and the Azure deployment.
+> - **Known issue:** `/mcp` sends no CORS headers, so clients that connect from inside a
+>   browser cannot use it. The MCP Inspector v2.16 timed out against it; this may be the
+>   cause. Clients that connect from a server, such as Claude, are not affected.
 >
 > Sections marked _(not yet run)_ contain commands that have not been executed for this
 > project yet.
