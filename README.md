@@ -24,8 +24,16 @@ is not tied to one assistant: any compliant client can connect.
 > - **Not yet verified:** the Azure deployment, and Claude on the web or mobile (they
 >   need the deployed, public URL).
 > - **Known issue:** `/mcp` sends no CORS headers, so clients that connect from inside a
->   browser cannot use it. The MCP Inspector v2.16 timed out against it; this may be the
->   cause. Clients that connect from a server, such as Claude, are not affected.
+>   browser cannot use it. Clients that connect from a server, such as Claude, are not
+>   affected.
+> - **MCP Inspector v2.16 does not connect, but this server is not the cause.** The
+>   Inspector connects from its own Node process, not from the browser, so CORS does
+>   not apply. In local tests it stayed on "Connecting..." and never sent a request to
+>   this server, and it stalled the same way against the official
+>   `example-server.modelcontextprotocol.io`. Both servers answer `initialize`
+>   normally from `curl` and from Node. The likely cause is local antivirus software
+>   that inspects web traffic and holds back the Inspector's event stream; this has
+>   not been confirmed.
 >
 > Sections marked _(not yet run)_ contain commands that have not been executed for this
 > project yet.
