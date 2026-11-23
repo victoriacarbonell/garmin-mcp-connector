@@ -1,8 +1,7 @@
 # Garmin MCP connector
 
-> 🚧 **Work in progress.** This project is not finished yet: the tools and the GitHub
-> login have been tested locally with real data and a real GitHub account, but the
-> connector has not been deployed or used from an assistant yet.
+> 🚧 **Work in progress.** This project is not finished yet: it works locally with real
+> data, a real GitHub login and Claude Code, but it has not been deployed yet.
 
 A personal, read-only [MCP](https://modelcontextprotocol.io) server that lets an AI
 assistant read **my own** Garmin data through the official Garmin Connect Personal API.
@@ -20,7 +19,10 @@ is not tied to one assistant: any compliant client can connect.
 >     GitHub login, consent screen, token exchange and MCP calls with the token. Another
 >     GitHub account is refused before the consent screen, and an invalid token gets
 >     `401`.
-> - **Not yet verified:** assistant clients such as Claude, and the Azure deployment.
+>   - Claude Code as a client: login through `/mcp` and real questions answered with
+>     the right tools.
+> - **Not yet verified:** the Azure deployment, and Claude on the web or mobile (they
+>   need the deployed, public URL).
 > - **Known issue:** `/mcp` sends no CORS headers, so clients that connect from inside a
 >   browser cannot use it. The MCP Inspector v2.16 timed out against it; this may be the
 >   cause. Clients that connect from a server, such as Claude, are not affected.
@@ -146,6 +148,19 @@ To fill in `.env`:
 
 To try the tools without any login, set `GARMIN_MCP_AUTH_DISABLED=1`. The server then
 only accepts `127.0.0.1` and refuses to start on any other host.
+
+### Using it from Claude Code
+
+Claude Code connects from your own machine, so the local server is enough:
+
+```bash
+claude mcp add --transport http garmin http://localhost:8000/mcp
+```
+
+Then run `/mcp` inside Claude Code, pick `garmin` and authenticate: the browser goes
+through the GitHub login and the consent screen. The server must be running whenever
+Claude Code uses the tools. Claude on the web and on mobile connect from Anthropic's
+servers instead, so they need the deployed, public URL (see below).
 
 ## Deploying to Azure _(not yet run)_
 
