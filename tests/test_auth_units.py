@@ -1,6 +1,8 @@
 """Unit tests for the pieces of the authorization server that need no HTTP."""
 
 import pytest
+from mcp.shared.auth import InvalidRedirectUriError
+from pydantic import AnyUrl
 
 from garmin_mcp import config
 from garmin_mcp.auth.clients import _client_from_document, _is_valid_metadata_url
@@ -69,6 +71,49 @@ def test_metadata_document_is_accepted_as_a_public_client():
 )
 def test_bad_metadata_documents_are_rejected(document):
     assert _client_from_document(URL, document) is None
+
+
+# Claude Code's real client metadata document registers loopback URIs with no port
+# and then listens on a random one (RFC 8252 section 7.3).
+LOOPBACK_CLIENT = _client_from_document(
+    URL, {**DOCUMENT, "redirect_uris": ["http://localhost/callback", "http://127.0.0.1/callback"]}
+)
+
+
+@pytest.mark.parametrize(
+    "redirect_uri",
+    [
+        "http://localhost:43491/callback",
+        "http://127.0.0.1:8765/callback",
+        "http://localhost/callback",  # exact match still works
+    ],
+)
+def test_loopback_redirect_accepts_any_port(redirect_uri):
+    assert str(LOOPBACK_CLIENT.validate_redirect_uri(AnyUrl(redirect_uri))) == redirect_uri
+
+
+@pytest.mark.parametrize(
+    "redirect_uri",
+    [
+        "http://localhost:43491/other",  # different path
+        "http://localhost:43491/callback?x=1",  # extra query
+        "https://localhost:43491/callback",  # different scheme
+        "http://[::1]:43491/callback",  # loopback, but not a registered host
+        "http://localhost.evil.example:43491/callback",
+        "http://evil.example:43491/callback",
+        "http://user@localhost:43491/callback",
+    ],
+)
+def test_loopback_redirect_rejects_anything_else(redirect_uri):
+    with pytest.raises(InvalidRedirectUriError):
+        LOOPBACK_CLIENT.validate_redirect_uri(AnyUrl(redirect_uri))
+
+
+def test_non_loopback_redirect_still_needs_an_exact_match():
+    client = _client_from_document(URL, DOCUMENT)  # https://client.example/callback
+    assert client.validate_redirect_uri(AnyUrl("https://client.example/callback"))
+    with pytest.raises(InvalidRedirectUriError):
+        client.validate_redirect_uri(AnyUrl("https://client.example:8443/callback"))
 
 
 @pytest.fixture

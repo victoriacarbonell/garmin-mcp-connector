@@ -38,6 +38,51 @@ METADATA_DOCUMENT_MAX_BYTES = 64 * 1024
 METADATA_DOCUMENT_CACHE_SECONDS = 600
 METADATA_DOCUMENT_TIMEOUT_SECONDS = 5.0
 
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "[::1]"})
+
+
+def _is_loopback_match(registered: Any, requested: Any) -> bool:
+    """RFC 8252 section 7.3: for a loopback redirect URI, any port is allowed.
+
+    Native clients (Claude Code, desktop apps) listen on a random free port and
+    register the URI without one, e.g. "http://localhost/callback". Everything
+    except the port must still match exactly: scheme (http), host, path and query.
+    """
+    reg, req = urlparse(str(registered)), urlparse(str(requested))
+    try:
+        req.port  # raises ValueError on a malformed port
+    except ValueError:
+        return False
+    if reg.scheme != "http" or req.scheme != "http":
+        return False
+    if "@" in reg.netloc or "@" in req.netloc:  # no user info in a redirect URI
+        return False
+    reg_host, req_host = _host_part(reg.netloc), _host_part(req.netloc)
+    return (
+        reg_host in _LOOPBACK_HOSTS
+        and req_host == reg_host
+        and (req.path, req.query, req.fragment) == (reg.path, reg.query, reg.fragment)
+    )
+
+
+def _host_part(netloc: str) -> str:
+    """"localhost:43491" -> "localhost", "[::1]:8080" -> "[::1]", "127.0.0.1" -> "127.0.0.1"."""
+    if netloc.startswith("["):
+        return netloc[: netloc.index("]") + 1] if "]" in netloc else netloc
+    return netloc.split(":", 1)[0]
+
+
+class ClientInfo(OAuthClientInformationFull):
+    """The SDK's client model, plus the loopback port rule of RFC 8252."""
+
+    def validate_redirect_uri(self, redirect_uri: Any) -> Any:
+        if redirect_uri is not None and any(
+            _is_loopback_match(registered, redirect_uri) for registered in self.redirect_uris or ()
+        ):
+            return redirect_uri
+        return super().validate_redirect_uri(redirect_uri)
+
+
 # Fields of a registration that are worth keeping inside the signed client_id.
 _REGISTERED_FIELDS = (
     "redirect_uris", "token_endpoint_auth_method", "grant_types", "response_types",
@@ -79,7 +124,7 @@ class ClientStore:
         if metadata.get("token_endpoint_auth_method") != "none":
             secret = self._secret_for(client_id)
         try:
-            return OAuthClientInformationFull.model_validate(
+            return ClientInfo.model_validate(
                 {**metadata, "client_id": client_id, "client_secret": secret, "client_secret_expires_at": 0 if secret else None}
             )
         except ValidationError:
@@ -158,7 +203,7 @@ def _client_from_document(url: str, document: Any) -> OAuthClientInformationFull
     if document.get("token_endpoint_auth_method", "none") != "none":
         return None
     try:
-        return OAuthClientInformationFull.model_validate(
+        return ClientInfo.model_validate(
             {
                 "client_id": url,
                 "client_name": document["client_name"],
