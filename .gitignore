@@ -24,3 +24,6 @@ data/
 .vscode/
 .idea/
 .DS_Store
+
+# Local instructions for Claude Code (kept on this machine only)
+CLAUDE.md
