@@ -53,9 +53,9 @@ are used.
 
 Worth knowing from the real API:
 
-- `get_health_range` returns about 6,000 characters per day with all three metrics, so a
-  31-day range uses a good share of an assistant's context. Ask for fewer metrics or a
-  shorter range when possible.
+- `get_health_range` keeps only the values useful for trends (see `RANGE_FIELDS` in
+  `tools.py`): about 1,100 characters per day with all three metrics, down from about
+  6,000. `get_daily_health` still returns every field of one day.
 - `get_menstrual_cycle` gives the phase as a numeric id (`currentPhase`) whose meaning
   Garmin does not document.
 

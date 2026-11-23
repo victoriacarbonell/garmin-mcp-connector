@@ -127,6 +127,12 @@ def create_mcp_server(**auth_options: Any) -> MCPServer:
 
         metrics: a list with "daily_summary" (max 365 days), "sleep" (max 31 days) and/or
         "hrv". If omitted, all three are requested, and then the range cannot exceed 31 days.
+
+        Each day is trimmed to the values useful for trends: daily_summary keeps steps,
+        floors, calories, heart rate, stress, Body Battery, intensity minutes, SpO2 and
+        respiration; sleep keeps durations by stage, awakenings, heart rate, SpO2,
+        respiration, stress and the overall sleep score; hrv is returned in full. Values
+        are Garmin's, unchanged. For every field of one day, use get_daily_health.
         """
         return await _run(
             "get_health_range", lambda: tools.get_health_range(get_service(), start_date, end_date, metrics)

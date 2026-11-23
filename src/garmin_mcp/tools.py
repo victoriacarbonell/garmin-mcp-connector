@@ -56,6 +56,45 @@ RANGE_METRICS: dict[str, tuple[str, int | None]] = {
     "hrv": ("get_daily_hrv_summaries", None),  # the Swagger documents no limit
 }
 
+# Fields get_health_range keeps for each day, as a nested spec: a set lists the
+# keys kept from a dict, a dict maps a key to the spec of its value. A full day
+# is ~6,000 characters (feedback messages, "optimal" ranges, timestamps...); a
+# 31-day range would use a large share of the assistant's context just to look
+# at trends. get_daily_health still returns one day in full. Names come from
+# real responses of the Personal API.
+RANGE_FIELDS: dict[str, Any] = {
+    "daily_summary": {
+        "calendarDate": None,
+        "movement": {
+            "steps": {"value", "goal", "distanceInMeters"},
+            "floorsAscended": {"value"},
+        },
+        "calories": {"burnedTotal", "burnedActive"},
+        "heartRate": {"restingValue", "minValue", "maxValue"},
+        "stress": {"avgLevel", "maxLevel", "qualifier"},
+        "bodyBattery": {"minValue", "maxValue", "chargedValue", "drainedValue"},
+        "intensityMinutes": {"moderate", "vigorous"},
+        "pulseOx": {"avgValue"},
+        "respiration": {"avgValue"},
+    },
+    "sleep": {
+        "calendarDate": None,
+        "sleepTimeSeconds": None,
+        "deepSleepSeconds": None,
+        "lightSleepSeconds": None,
+        "remSleepSeconds": None,
+        "awakeSleepSeconds": None,
+        "awakeCount": None,
+        "avgHeartRate": None,
+        "averageSpO2Value": None,
+        "averageRespirationValue": None,
+        "avgSleepStress": None,
+        "sleepScores": {"overall": {"value", "qualifierKey"}},
+    },
+    # Already small (~300 characters a day): returned as Garmin sends it.
+    "hrv": None,
+}
+
 
 def _parse_date(value: str, name: str) -> date:
     try:
@@ -81,6 +120,26 @@ def _clean(value: Any) -> Any:
     if isinstance(value, list):
         return [_clean(v) for v in value]
     return value
+
+
+def _pick(value: Any, spec: Any) -> Any:
+    """Keep only the fields named in `spec` (see RANGE_FIELDS). Never alters a value.
+
+    Lists are walked item by item. A dict whose keys the spec does not name is
+    treated as a container (e.g. {"data": [...]}) and each of its values is picked.
+    """
+    if spec is None:
+        return value
+    if isinstance(value, list):
+        return [_pick(v, spec) for v in value]
+    if not isinstance(value, dict):
+        return value
+    names = spec if isinstance(spec, (set, frozenset)) else set(spec)
+    if not names & value.keys():
+        return {k: _pick(v, spec) for k, v in value.items() if isinstance(v, (list, dict))}
+    if isinstance(spec, dict):
+        return {k: _pick(value[k], sub) for k, sub in spec.items() if k in value}
+    return {k: value[k] for k in spec if k in value}
 
 
 def _envelope(data: Any, warnings: list[str] | None = None) -> dict[str, Any]:
@@ -191,7 +250,7 @@ async def get_health_range(
     data, warnings = await _sections({
         m: service.call(RANGE_METRICS[m][0], start.isoformat(), end.isoformat()) for m in selected
     })
-    return _envelope(data, warnings)
+    return _envelope({m: _pick(v, RANGE_FIELDS[m]) for m, v in data.items()}, warnings)
 
 
 # HTTP statuses that, for the menstrual cycle endpoints, most likely mean that

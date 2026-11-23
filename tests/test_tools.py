@@ -125,6 +125,86 @@ def test_health_range_enforces_documented_limits():
     assert service.calls[0][0] == "get_daily_summaries"
 
 
+# Same shape as real Personal API responses. Every value is invented: never paste
+# real health data into tests, the repository is public.
+RANGE_DAILY_SUMMARIES = {"data": [{
+    "calendarDate": "2026-01-15",
+    "uuid": "abc",
+    "movement": {
+        "steps": {"goal": 10000, "value": 12000, "distanceInMeters": 9000.0},
+        "pushes": {},
+        "floorsAscended": {"goal": 10, "value": 20, "distanceInMeters": 60.0},
+        "floorsDescended": {"value": 20},
+    },
+    "calories": {"burnedResting": 1500, "burnedActive": 500, "burnedTotal": 2000},
+    "heartRate": {"minValue": 50, "maxValue": 150, "restingValue": 60},
+    "stress": {"avgLevel": 25, "maxLevel": 90, "qualifier": "balanced", "restProportion": 0.5},
+    "bodyBattery": {
+        "minValue": 20, "maxValue": 90, "chargedValue": 60, "drainedValue": 70,
+        "dynamicFeedbackEvent": {"feedbackShortType": "SLEEP_PREPARATION"},
+    },
+    "intensityMinutes": {"goal": 150, "moderate": 30, "vigorous": 10},
+    "pulseOx": {"avgValue": 95, "minValue": 90},
+    "respiration": {"avgValue": 15, "maxValue": 20},
+    "hydration": {"goalInMl": 2000},
+    "wellnessChronology": {"totalDurationInMillis": 86400000},
+}]}
+RANGE_SLEEP = [{
+    "calendarDate": "2026-01-15",
+    "sleepTimeSeconds": 28800, "deepSleepSeconds": 3600, "lightSleepSeconds": 18000,
+    "remSleepSeconds": 7200, "awakeSleepSeconds": 600, "awakeCount": 1,
+    "avgHeartRate": 60.0, "averageSpO2Value": 95.0, "averageRespirationValue": 15.0,
+    "avgSleepStress": 20.0,
+    "sleepStartTimestampGMT": 1768440000000,
+    "sleepScores": {
+        "overall": {"value": 80, "qualifierKey": "GOOD"},
+        "remPercentage": {"value": 25, "optimalStart": 21.0},
+    },
+    "sleepNeed": {"baseline": 480},
+}]
+RANGE_HRV = {"hrvSummaries": [{"calendarDate": "2026-01-15", "lastNightAvg": 60, "status": "BALANCED"}]}
+
+
+def test_health_range_keeps_only_trend_fields():
+    service = FakeService({
+        "get_daily_summaries": RANGE_DAILY_SUMMARIES,
+        "get_daily_sleep_summaries": RANGE_SLEEP,
+        "get_daily_hrv_summaries": RANGE_HRV,
+    })
+    data = run(tools.get_health_range(service, "2026-01-15", "2026-01-15"))["garmin_data"]
+
+    assert data["daily_summary"] == {"data": [{
+        "calendarDate": "2026-01-15",
+        "movement": {
+            "steps": {"goal": 10000, "value": 12000, "distanceInMeters": 9000.0},
+            "floorsAscended": {"value": 20},
+        },
+        "calories": {"burnedActive": 500, "burnedTotal": 2000},
+        "heartRate": {"minValue": 50, "maxValue": 150, "restingValue": 60},
+        "stress": {"avgLevel": 25, "maxLevel": 90, "qualifier": "balanced"},
+        "bodyBattery": {"minValue": 20, "maxValue": 90, "chargedValue": 60, "drainedValue": 70},
+        "intensityMinutes": {"moderate": 30, "vigorous": 10},
+        "pulseOx": {"avgValue": 95},
+        "respiration": {"avgValue": 15},
+    }]}
+    assert data["sleep"] == [{
+        "calendarDate": "2026-01-15",
+        "sleepTimeSeconds": 28800, "deepSleepSeconds": 3600, "lightSleepSeconds": 18000,
+        "remSleepSeconds": 7200, "awakeSleepSeconds": 600, "awakeCount": 1,
+        "avgHeartRate": 60.0, "averageSpO2Value": 95.0, "averageRespirationValue": 15.0,
+        "avgSleepStress": 20.0,
+        "sleepScores": {"overall": {"value": 80, "qualifierKey": "GOOD"}},
+    }]
+    # HRV is already small and comes back untouched.
+    assert data["hrv"] == RANGE_HRV
+
+
+def test_health_range_skips_fields_garmin_did_not_send():
+    service = FakeService({"get_daily_sleep_summaries": [{"calendarDate": "2026-01-15", "awakeCount": 2}]})
+    data = run(tools.get_health_range(service, "2026-01-15", "2026-01-15", ["sleep"]))["garmin_data"]
+    assert data["sleep"] == [{"calendarDate": "2026-01-15", "awakeCount": 2}]
+
+
 def test_health_range_rejects_unknown_metrics():
     with pytest.raises(ValueError, match="Invalid metrics"):
         run(tools.get_health_range(FakeService(), "2026-11-01", "2026-11-07", ["steps"]))
