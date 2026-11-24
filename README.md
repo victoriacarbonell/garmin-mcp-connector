@@ -182,6 +182,21 @@ to stay inside it. That is a quota, not a spending cap, hence the budget alert b
 
 ### One-time setup
 
+Requires an Azure subscription and the
+[Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli). The commands below
+are for bash (Git Bash on Windows).
+
+```bash
+az login
+az extension add --name containerapp --upgrade
+az provider register --namespace Microsoft.App
+az provider register --namespace Microsoft.OperationalInsights   # Log Analytics
+```
+
+Then create the resource group and the environment. The environment also creates a Log
+Analytics workspace, which keeps the logs for 30 days (they hold no health data, see
+"Reading the logs").
+
 ```bash
 RG=rg-garmin-mcp
 ENVIRONMENT=cae-garmin-mcp
@@ -201,7 +216,8 @@ Create a **second** GitHub OAuth App for production, with callback
 `<PUBLIC_URL>/auth/github/callback` (an OAuth App allows a single callback URL).
 
 Run the **Deploy** workflow once so the image exists (its deploy job will fail until the
-app is created; that is expected). Then create a GitHub personal access token with only
+app is created; that is expected). Then create a GitHub personal access token
+(**classic**: fine-grained tokens do not work with the container registry) with only
 `read:packages`, so Azure can pull the private image, and create the app:
 
 ```bash
@@ -266,6 +282,21 @@ az containerapp revision restart --name garmin-mcp --resource-group rg-garmin-mc
 
 Clients stay connected: the Garmin key and the clients' tokens are independent.
 Locally, just edit `.env` and restart.
+
+### The registry token expires _(not yet run)_
+
+Azure pulls the private image with the `read:packages` token every time the app starts
+from zero. If the token expires, the running app keeps working, but the next cold start
+fails to pull the image and the app stays down. GitHub emails before the token expires.
+
+1. GitHub > Settings > Developer settings > Personal access tokens (classic): regenerate
+   the token, keeping only `read:packages`.
+2. Give it to Azure:
+
+```bash
+az containerapp registry set --name garmin-mcp --resource-group rg-garmin-mcp \
+  --server ghcr.io --username victoriacarbonell --password <NEW_READ_PACKAGES_TOKEN>
+```
 
 ### Logging every client out
 
